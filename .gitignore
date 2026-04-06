@@ -1,0 +1,59 @@
+# ─── General ───────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+
+# ─── Python / Backend ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.env
+backend/staticfiles/
+backend/db.sqlite3
+
+# ─── Mobile / Node ──────────────────────────────────────────────────────────
+pothole-patrol-mobile/node_modules/
+pothole-patrol-mobile/.expo/
+pothole-patrol-mobile/dist/
+pothole-patrol-mobile/web-build/
+pothole-patrol-mobile/expo-env.d.ts
+pothole-patrol-mobile/*.tsbuildinfo
+pothole-patrol-mobile/.metro-health-check*
+pothole-patrol-mobile/ios/
+pothole-patrol-mobile/android/
+
+# ─── Firebase / Secrets ─────────────────────────────────────────────────────
+firebase-credentials.json
+google-services.json
+GoogleService-Info.plist
+*.pem
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# ─── ML Models (large binaries) ─────────────────────────────────────────────
+*.pt
+*.onnx
+*.weights
+*.h5
+ml/models/
