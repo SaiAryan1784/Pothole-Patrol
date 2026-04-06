@@ -12,7 +12,9 @@ ALLOWED_HOSTS += ['healthcheck.railway.app', '.railway.app']
 # ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------
-SECURE_SSL_REDIRECT = True
+# Railway terminates SSL at the edge — internal traffic is plain HTTP.
+# SECURE_SSL_REDIRECT must be False or the health checker gets a 301 loop.
+SECURE_SSL_REDIRECT = False
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
