@@ -24,6 +24,7 @@ RUN DJANGO_SETTINGS_MODULE=config.settings.production \
     python manage.py collectstatic --noinput
 
 RUN chmod +x /app/start.sh
+RUN chmod +x /app/worker.sh
 
 EXPOSE 8000
 
