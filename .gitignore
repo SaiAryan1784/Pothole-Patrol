@@ -52,7 +52,6 @@ GoogleService-Info.plist
 *.mobileprovision
 
 # ─── ML Models (large binaries) ─────────────────────────────────────────────
-*.pt
 *.onnx
 *.weights
 *.h5
