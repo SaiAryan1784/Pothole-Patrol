@@ -1,0 +1,11 @@
+# Placeholder dataset config.
+# Run download_dataset.py to get a real dataset, then pass that data.yaml to train.py.
+# Or manually download a YOLO-format pothole dataset and update the paths below.
+
+path: ../data/pothole-detection-1   # update to your dataset root after download
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 1
+names: ['pothole']
