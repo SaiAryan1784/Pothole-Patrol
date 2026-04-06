@@ -21,17 +21,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 load_dotenv(BASE_DIR / '.env')
 
-# --- Geospatial Library Paths (macOS Homebrew) ---
-# Django's autodiscovery fails to locate Homebrew-installed GDAL/GEOS on macOS.
-# Set explicit paths. Adjust if your GDAL/GEOS version differs from what's below.
-GDAL_LIBRARY_PATH = os.environ.get(
-    'GDAL_LIBRARY_PATH',
-    '/opt/homebrew/lib/libgdal.dylib'
-)
-GEOS_LIBRARY_PATH = os.environ.get(
-    'GEOS_LIBRARY_PATH',
-    '/opt/homebrew/lib/libgeos_c.dylib'
-)
+# --- Geospatial Library Paths ---
+# Only set explicit paths when env vars are provided (macOS Homebrew dev).
+# In Docker/Railway, leave these unset — Django finds system GDAL via ctypes.
+# Local dev: set GDAL_LIBRARY_PATH=/opt/homebrew/lib/libgdal.dylib in backend/.env
+_gdal_path = os.environ.get('GDAL_LIBRARY_PATH')
+if _gdal_path:
+    GDAL_LIBRARY_PATH = _gdal_path
+
+_geos_path = os.environ.get('GEOS_LIBRARY_PATH')
+if _geos_path:
+    GEOS_LIBRARY_PATH = _geos_path
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
