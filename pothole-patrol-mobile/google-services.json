@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "42213336452",
+    "project_id": "pothole-patrol-e07c8",
+    "storage_bucket": "pothole-patrol-e07c8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:42213336452:android:cf011c343c9786104b29d1",
+        "android_client_info": {
+          "package_name": "com.saiaryan1784"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDeYNTgKACUhrFC8zMUlwb169MTFdbH534"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

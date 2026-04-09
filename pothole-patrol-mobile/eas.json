@@ -19,11 +19,22 @@
       }
     },
     "production": {
-      "distribution": "store",
-      "autoIncrement": true
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://pothole-patrol-production.up.railway.app/v1",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBdwjJAkr0VrgVIN98aXtsREFhbiiWmu0Y",
+        "EXPO_PUBLIC_ML_CONFIDENCE_THRESHOLD": "0.5"
+      }
     }
   },
   "submit": {
     "production": {}
+  },
+  "cli": {
+    "appVersionSource": "remote"
   }
 }

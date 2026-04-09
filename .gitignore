@@ -43,6 +43,7 @@ pothole-patrol-mobile/android/
 # ─── Firebase / Secrets ─────────────────────────────────────────────────────
 firebase-credentials.json
 google-services.json
+!pothole-patrol-mobile/google-services.json
 GoogleService-Info.plist
 *.pem
 *.jks
