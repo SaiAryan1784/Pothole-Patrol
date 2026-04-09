@@ -23,6 +23,7 @@ from rest_framework.views import APIView
 from apps.reports.models import Report, Upvote, STATUS_CHOICES
 from apps.reports.serializers import ReportSerializer, ReportCreateSerializer
 from apps.reports.permissions import DailyReportRateLimit
+from apps.reports.tasks import process_report_ml
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +74,11 @@ class ReportListCreateView(generics.ListCreateAPIView):
         report = serializer.save(user=request.user)
 
         # Trigger async ML confidence routing
-        from apps.reports.tasks import process_report_ml
         process_report_ml.delay(report.pk)
 
-        headers = self.get_success_headers(serializer.data)
-        return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED, headers=headers)
+        data = ReportSerializer(report).data
+        headers = self.get_success_headers(data)
+        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class ReportDetailView(generics.RetrieveAPIView):
