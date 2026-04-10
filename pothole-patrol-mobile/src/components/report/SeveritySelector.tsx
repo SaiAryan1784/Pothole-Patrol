@@ -1,19 +1,21 @@
 import { View, Text, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Severity } from '../../types/report.types';
 
 interface Option {
     id: Severity;
     label: string;
-    emoji: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    color: string;
     activeBg: string;
     activeText: string;
 }
 
 const OPTIONS: Option[] = [
-    { id: 'LOW',      label: 'Minor',   emoji: '🟢', activeBg: '#dcfce7', activeText: '#166534' },
-    { id: 'MEDIUM',   label: 'Major',   emoji: '🟠', activeBg: '#ffedd5', activeText: '#9a3412' },
-    { id: 'HIGH',     label: 'Serious', emoji: '🔴', activeBg: '#fee2e2', activeText: '#991b1b' },
-    { id: 'CRITICAL', label: 'Hazard',  emoji: '💀', activeBg: '#1c0202', activeText: '#fca5a5' },
+    { id: 'LOW',      label: 'Minor',   icon: 'alert-circle-outline', color: '#22c55e', activeBg: '#dcfce7', activeText: '#166534' },
+    { id: 'MEDIUM',   label: 'Major',   icon: 'warning-outline',      color: '#f97316', activeBg: '#ffedd5', activeText: '#9a3412' },
+    { id: 'HIGH',     label: 'Serious', icon: 'alert',                color: '#ef4444', activeBg: '#fee2e2', activeText: '#991b1b' },
+    { id: 'CRITICAL', label: 'Hazard',  icon: 'flash',                color: '#b91c1c', activeBg: '#1c0202', activeText: '#fca5a5' },
 ];
 
 interface Props {
@@ -30,25 +32,40 @@ export default function SeveritySelector({ selected, onSelect }: Props) {
                     <TouchableOpacity
                         key={opt.id}
                         onPress={() => onSelect(opt.id)}
+                        activeOpacity={0.75}
                         style={{
                             flex: 1,
-                            paddingVertical: 12,
                             borderRadius: 12,
-                            alignItems: 'center',
+                            overflow: 'hidden',
                             backgroundColor: active ? opt.activeBg : '#ffffff',
                             borderWidth: 1.5,
-                            borderColor: active ? opt.activeBg : '#e2e8f0',
+                            borderColor: active ? opt.color : '#e2e8f0',
+                            transform: [{ scale: active ? 1.04 : 1 }],
                         }}
                     >
-                        <Text style={{ fontSize: 18, marginBottom: 4 }}>{opt.emoji}</Text>
-                        <Text style={{
-                            fontSize: 11,
-                            fontWeight: '700',
-                            color: active ? opt.activeText : '#64748b',
-                            letterSpacing: 0.3,
-                        }}>
-                            {opt.label.toUpperCase()}
-                        </Text>
+                        {/* Colored top accent bar */}
+                        <View style={{
+                            height: 4,
+                            backgroundColor: opt.color,
+                            opacity: active ? 1 : 0.35,
+                        }} />
+
+                        <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+                            <Ionicons
+                                name={opt.icon}
+                                size={20}
+                                color={active ? opt.color : '#94a3b8'}
+                            />
+                            <Text style={{
+                                fontSize: 10,
+                                fontWeight: '700',
+                                letterSpacing: 0.4,
+                                marginTop: 4,
+                                color: active ? opt.activeText : '#64748b',
+                            }}>
+                                {opt.label.toUpperCase()}
+                            </Text>
+                        </View>
                     </TouchableOpacity>
                 );
             })}

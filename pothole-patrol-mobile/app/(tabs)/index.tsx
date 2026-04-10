@@ -5,6 +5,9 @@ import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+    useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing,
+} from 'react-native-reanimated';
 import MapFilterBar, { MapFilter } from '../../src/components/map/MapFilterBar';
 import HeatmapLayer from '../../src/components/map/HeatmapLayer';
 import ReportMarker from '../../src/components/map/ReportMarker';
@@ -12,6 +15,30 @@ import ReportCard from '../../src/components/report/ReportCard';
 import { useLocation } from '../../src/hooks/useLocation';
 import { useReportsStore } from '../../src/store/reportsStore';
 import { Report } from '../../src/types/report.types';
+
+function FabPulse() {
+    const scale = useSharedValue(1);
+    const opacity = useSharedValue(0.5);
+
+    useEffect(() => {
+        scale.value = withRepeat(withTiming(1.5, { duration: 2000, easing: Easing.out(Easing.ease) }), -1, false);
+        opacity.value = withRepeat(withTiming(0, { duration: 2000, easing: Easing.out(Easing.ease) }), -1, false);
+    }, []);
+
+    const style = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+        opacity: opacity.value,
+    }));
+
+    return (
+        <Animated.View style={[{
+            position: 'absolute',
+            width: '100%', height: '100%',
+            borderRadius: 32,
+            backgroundColor: 'rgba(37,99,235,0.35)',
+        }, style]} />
+    );
+}
 
 function applyFilter(reports: Report[], filter: MapFilter): Report[] {
     const now = Date.now();
@@ -116,30 +143,36 @@ export default function HomeMapScreen() {
                     position: 'absolute', bottom: 100, right: 20,
                     backgroundColor: 'white', width: 44, height: 44, borderRadius: 22,
                     alignItems: 'center', justifyContent: 'center',
-                    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.18, shadowRadius: 4, elevation: 5,
+                    borderWidth: 1, borderColor: '#dbeafe',
+                    shadowColor: '#2563EB', shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.15, shadowRadius: 6, elevation: 5,
                 }}
             >
                 <Ionicons name="locate-outline" size={22} color="#2563EB" />
             </TouchableOpacity>
 
-            {/* Report FAB */}
-            <TouchableOpacity
-                onPress={() => router.push('/(tabs)/report')}
-                style={{
-                    position: 'absolute', bottom: 100, alignSelf: 'center',
-                    backgroundColor: '#2563EB',
-                    flexDirection: 'row', alignItems: 'center', gap: 8,
-                    paddingHorizontal: 24, paddingVertical: 14, borderRadius: 32,
-                    shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.4, shadowRadius: 10, elevation: 8,
-                }}
-            >
-                <Ionicons name="camera" size={20} color="white" />
-                <Text style={{ color: 'white', fontWeight: '700', fontSize: 15, letterSpacing: 0.3 }}>
-                    Report Pothole
-                </Text>
-            </TouchableOpacity>
+            {/* Report FAB with pulse ring */}
+            <View style={{
+                position: 'absolute', bottom: 100, alignSelf: 'center',
+                alignItems: 'center', justifyContent: 'center',
+            }}>
+                <FabPulse />
+                <TouchableOpacity
+                    onPress={() => router.push('/(tabs)/report')}
+                    style={{
+                        backgroundColor: '#2563EB',
+                        flexDirection: 'row', alignItems: 'center', gap: 8,
+                        paddingHorizontal: 24, paddingVertical: 14, borderRadius: 32,
+                        shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.45, shadowRadius: 12, elevation: 8,
+                    }}
+                >
+                    <Ionicons name="camera" size={20} color="white" />
+                    <Text style={{ color: 'white', fontWeight: '700', fontSize: 15, letterSpacing: 0.3 }}>
+                        Report Pothole
+                    </Text>
+                </TouchableOpacity>
+            </View>
 
             <BottomSheetModal
                 ref={bottomSheetRef}
