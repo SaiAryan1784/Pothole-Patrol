@@ -26,7 +26,7 @@ class ReportSerializer(serializers.ModelSerializer):
         model = Report
         fields = [
             'id', 'user', 'latitude', 'longitude',
-            'image_url', 'severity', 'status',
+            'image_url', 'description', 'severity', 'status',
             'confidence', 'upvotes', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'user', 'status', 'upvotes', 'created_at', 'updated_at']
@@ -44,6 +44,7 @@ class ReportCreateSerializer(serializers.Serializer):
     image_url = serializers.URLField(max_length=500)
     severity = serializers.ChoiceField(choices=['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])
     confidence = serializers.FloatField(min_value=0.0, max_value=1.0)
+    description = serializers.CharField(max_length=1000, required=False, default='')
 
     def validate(self, data):
         lat = data['latitude']

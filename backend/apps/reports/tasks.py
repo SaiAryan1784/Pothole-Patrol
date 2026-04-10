@@ -100,8 +100,9 @@ def process_report_ml(self, report_id: int) -> dict:
         report.save(update_fields=['status', 'updated_at'])
         logger.info('Report %s auto-verified (confidence=%.2f)', report_id, confidence)
 
-        # Award points and dispatch to civic body asynchronously
-        award_points_for_report.delay(report_id)
+        # Award points only if the report was submitted by a logged-in user
+        if report.user is not None:
+            award_points_for_report.delay(report_id)
         dispatch_report_to_civic_body.delay(report_id)
 
     elif confidence >= REVIEW_MIN:

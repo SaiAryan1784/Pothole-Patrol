@@ -1,8 +1,10 @@
-import { View, TouchableOpacity, Text } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapFilterBar, { MapFilter } from '../../src/components/map/MapFilterBar';
 import HeatmapLayer from '../../src/components/map/HeatmapLayer';
 import ReportMarker from '../../src/components/map/ReportMarker';
@@ -14,28 +16,29 @@ import { Report } from '../../src/types/report.types';
 function applyFilter(reports: Report[], filter: MapFilter): Report[] {
     const now = Date.now();
     switch (filter) {
-        case 'Has Minor':   return reports.filter(r => r.severity === 'LOW');
-        case 'Has Major':   return reports.filter(r => r.severity === 'MEDIUM' || r.severity === 'HIGH');
-        case 'Has Hazard':  return reports.filter(r => r.severity === 'CRITICAL');
-        case 'Recent':      return reports.filter(r => now - new Date(r.created_at).getTime() < 86400000);
-        default:            return reports;
+        case 'Has Minor':  return reports.filter(r => r.severity === 'LOW');
+        case 'Has Major':  return reports.filter(r => r.severity === 'MEDIUM' || r.severity === 'HIGH');
+        case 'Has Hazard': return reports.filter(r => r.severity === 'CRITICAL');
+        case 'Recent':     return reports.filter(r => now - new Date(r.created_at).getTime() < 86400000);
+        default:           return reports;
     }
 }
 
 export default function HomeMapScreen() {
     const router = useRouter();
-    const { location } = useLocation();
+    const insets = useSafeAreaInsets();
+    const { location, errorMsg } = useLocation();
     const { reports, fetchHeatmapData, fetchNearbyReports } = useReportsStore();
     const [activeFilter, setActiveFilter] = useState<MapFilter>('All');
     const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+    const [mapReady, setMapReady] = useState(false);
     const bottomSheetRef = useRef<BottomSheetModal>(null);
+    const mapRef = useRef<MapView>(null);
 
     useEffect(() => {
         if (location) {
-            const lat = location.coords.latitude;
-            const lng = location.coords.longitude;
-            fetchHeatmapData(lat, lng);
-            fetchNearbyReports(lat, lng);
+            fetchHeatmapData(location.coords.latitude, location.coords.longitude);
+            fetchNearbyReports(location.coords.latitude, location.coords.longitude);
         }
     }, [location]);
 
@@ -44,25 +47,37 @@ export default function HomeMapScreen() {
         bottomSheetRef.current?.present();
     }, []);
 
-    const filteredReports = applyFilter(reports, activeFilter);
-
-    const initialRegion = {
-        latitude: location?.coords.latitude ?? 28.6139,
-        longitude: location?.coords.longitude ?? 77.2090,
-        latitudeDelta: 0.1,
-        longitudeDelta: 0.1,
+    const centerOnUser = () => {
+        if (location && mapRef.current) {
+            mapRef.current.animateToRegion({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+            }, 500);
+        }
     };
 
+    const filteredReports = applyFilter(reports, activeFilter);
+
     return (
-        <View className="flex-1 bg-gray-100">
+        <View style={{ flex: 1 }}>
             <MapView
+                ref={mapRef}
                 provider={PROVIDER_GOOGLE}
-                className="flex-1"
-                initialRegion={initialRegion}
+                style={{ flex: 1 }}
+                initialRegion={{
+                    latitude: location?.coords.latitude ?? 28.6139,
+                    longitude: location?.coords.longitude ?? 77.2090,
+                    latitudeDelta: 0.05,
+                    longitudeDelta: 0.05,
+                }}
                 showsUserLocation
+                showsMyLocationButton={false}
+                onMapReady={() => setMapReady(true)}
             >
-                <HeatmapLayer />
-                {filteredReports.map((report) => (
+                {mapReady && <HeatmapLayer />}
+                {mapReady && filteredReports.map((report) => (
                     <ReportMarker
                         key={report.id}
                         latitude={report.latitude}
@@ -73,17 +88,67 @@ export default function HomeMapScreen() {
                 ))}
             </MapView>
 
+            {/* Map loading overlay */}
+            {!mapReady && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="large" color="#2563EB" />
+                    <Text style={{ marginTop: 12, color: '#64748b', fontSize: 14, fontWeight: '500' }}>Loading map…</Text>
+                </View>
+            )}
+
+            {/* Location error toast */}
+            {errorMsg && (
+                <View style={{
+                    position: 'absolute', top: insets.top + 56, alignSelf: 'center',
+                    backgroundColor: 'rgba(239,68,68,0.92)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+                }}>
+                    <Text style={{ color: 'white', fontSize: 13, fontWeight: '500' }}>Location unavailable — showing Delhi</Text>
+                </View>
+            )}
+
+            {/* Filter bar — safe area aware */}
             <MapFilterBar activeFilter={activeFilter} onFilterChange={setActiveFilter} />
 
+            {/* My Location button */}
             <TouchableOpacity
-                className="absolute bottom-6 self-center bg-blue-600 w-16 h-16 rounded-full items-center justify-center shadow-lg"
-                onPress={() => router.push('/(tabs)/report')}
+                onPress={centerOnUser}
+                style={{
+                    position: 'absolute', bottom: 100, right: 20,
+                    backgroundColor: 'white', width: 44, height: 44, borderRadius: 22,
+                    alignItems: 'center', justifyContent: 'center',
+                    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.18, shadowRadius: 4, elevation: 5,
+                }}
             >
-                <Text className="text-white text-4xl leading-none mt-1">+</Text>
+                <Ionicons name="locate-outline" size={22} color="#2563EB" />
             </TouchableOpacity>
 
-            <BottomSheetModal ref={bottomSheetRef} snapPoints={['45%']} enablePanDownToClose>
-                <View className="flex-1 px-4 pt-2">
+            {/* Report FAB */}
+            <TouchableOpacity
+                onPress={() => router.push('/(tabs)/report')}
+                style={{
+                    position: 'absolute', bottom: 100, alignSelf: 'center',
+                    backgroundColor: '#2563EB',
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    paddingHorizontal: 24, paddingVertical: 14, borderRadius: 32,
+                    shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.4, shadowRadius: 10, elevation: 8,
+                }}
+            >
+                <Ionicons name="camera" size={20} color="white" />
+                <Text style={{ color: 'white', fontWeight: '700', fontSize: 15, letterSpacing: 0.3 }}>
+                    Report Pothole
+                </Text>
+            </TouchableOpacity>
+
+            <BottomSheetModal
+                ref={bottomSheetRef}
+                snapPoints={['50%']}
+                enablePanDownToClose
+                backgroundStyle={{ backgroundColor: '#f8fafc', borderTopLeftRadius: 20, borderTopRightRadius: 20 }}
+                handleIndicatorStyle={{ backgroundColor: '#cbd5e1' }}
+            >
+                <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 4 }}>
                     {selectedReport && <ReportCard report={selectedReport} />}
                 </View>
             </BottomSheetModal>

@@ -18,13 +18,16 @@ class STATUS_CHOICES(models.TextChoices):
 class Report(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='reports'
     )
     
     location = models.PointField(geography=True, spatial_index=True)
     image_url = models.URLField(max_length=500)
     
+    description = models.TextField(blank=True, default='')
     severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES.choices, default=SEVERITY_CHOICES.LOW)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES.choices, default=STATUS_CHOICES.PENDING)
     

@@ -3,7 +3,7 @@ export type ReportStatus = 'PENDING' | 'NEEDS_REVIEW' | 'VERIFIED' | 'REJECTED' 
 
 export interface Report {
     id: string;
-    user: string;
+    user: string | null;
     latitude: number;
     longitude: number;
     image_url: string;

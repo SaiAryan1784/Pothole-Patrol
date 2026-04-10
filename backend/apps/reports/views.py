@@ -16,13 +16,13 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.reports.models import Report, Upvote, STATUS_CHOICES
 from apps.reports.serializers import ReportSerializer, ReportCreateSerializer
-from apps.reports.permissions import DailyReportRateLimit
+from apps.reports.permissions import AnonDailyRateLimit
 from apps.reports.tasks import process_report_ml
 
 logger = logging.getLogger(__name__)
@@ -32,10 +32,10 @@ DEDUP_RADIUS_METRES = 50
 
 class ReportListCreateView(generics.ListCreateAPIView):
     """
-    GET  /v1/reports/  — Authenticated user's own reports (paginated).
-    POST /v1/reports/  — Submit a new report. Triggers ML task after creation.
+    GET  /v1/reports/  — List of all verified reports (public).
+    POST /v1/reports/  — Submit a new anonymous report. Triggers ML task after creation.
     """
-    permission_classes = [IsAuthenticated, DailyReportRateLimit]
+    permission_classes = [AnonDailyRateLimit]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -43,10 +43,30 @@ class ReportListCreateView(generics.ListCreateAPIView):
         return ReportSerializer
 
     def get_queryset(self):
-        return Report.objects.filter(user=self.request.user).order_by('-created_at')
+        return Report.objects.filter(status=STATUS_CHOICES.VERIFIED).order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
-        serializer = ReportCreateSerializer(data=request.data)
+        # Upload image to Cloudinary first
+        image_file = request.FILES.get('image')
+        if not image_file:
+            return Response({'detail': 'image file is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            import cloudinary.uploader
+            upload_result = cloudinary.uploader.upload(
+                image_file,
+                folder='pothole-patrol',
+                resource_type='image',
+            )
+            image_url = upload_result['secure_url']
+        except Exception as exc:
+            logger.error('Cloudinary upload failed: %s', exc)
+            return Response({'detail': 'Image upload failed. Try again.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
+        data['image_url'] = image_url
+
+        serializer = ReportCreateSerializer(data=data)
         serializer.is_valid(raise_exception=True)
 
         # --- Deduplication: check for verified reports within 50 metres ---
@@ -71,7 +91,7 @@ class ReportListCreateView(generics.ListCreateAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        report = serializer.save(user=request.user)
+        report = serializer.save(user=None)
 
         # Trigger async ML confidence routing
         process_report_ml.delay(report.pk)
@@ -84,7 +104,7 @@ class ReportListCreateView(generics.ListCreateAPIView):
 class ReportDetailView(generics.RetrieveAPIView):
     """GET /v1/reports/<id>/"""
     serializer_class = ReportSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     queryset = Report.objects.all()
 
 
@@ -94,7 +114,7 @@ class NearbyReportsView(generics.ListAPIView):
     Returns verified reports near a point. Used to render map markers.
     """
     serializer_class = ReportSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         from django.contrib.gis.geos import Point

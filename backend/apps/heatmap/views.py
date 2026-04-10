@@ -14,7 +14,7 @@ import logging
 from django.contrib.gis.geos import Point, Polygon
 from django.contrib.gis.measure import Distance
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -31,7 +31,7 @@ class HeatmapView(APIView):
     Optional: severity=LOW,MEDIUM,HIGH,CRITICAL (comma-separated)
     Returns up to 500 verified report points for the heatmap layer.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         queryset = Report.objects.filter(status=STATUS_CHOICES.VERIFIED)
