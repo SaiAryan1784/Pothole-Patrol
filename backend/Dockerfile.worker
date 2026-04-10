@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+# Runtime-only GDAL/GEOS/PROJ — same as web image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgdal32 \
+    libgeos-c1v5 \
+    libproj25 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt requirements-worker.txt ./
+# Install base deps first, then ML deps (CPU-only torch via extra index)
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-worker.txt
+
+COPY . .
+
+RUN chmod +x /app/worker.sh
+
+CMD ["/app/worker.sh"]

@@ -1,0 +1,4 @@
+# CPU-only torch must be pinned before ultralytics to prevent the 2 GB CUDA wheel
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+ultralytics>=8.4.0
