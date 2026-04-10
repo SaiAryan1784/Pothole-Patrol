@@ -77,7 +77,7 @@ export default function HomeMapScreen() {
                 onMapReady={() => setMapReady(true)}
             >
                 {mapReady && <HeatmapLayer />}
-                {mapReady && filteredReports.map((report) => (
+                {mapReady && filteredReports.filter(r => r.status === 'VERIFIED').map((report) => (
                     <ReportMarker
                         key={report.id}
                         latitude={report.latitude}

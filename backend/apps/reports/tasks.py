@@ -81,17 +81,29 @@ def process_report_ml(self, report_id: int) -> dict:
         logger.error('process_report_ml: Report %s not found', report_id)
         return {'error': 'report_not_found'}
 
-    # Run server-side inference; fall back to client-submitted confidence on failure.
+    # Run server-side inference. If the model is unavailable, route to NEEDS_REVIEW
+    # rather than trusting the client-submitted confidence (which is trivially spoofable).
+    model_available = True
     try:
         server_confidence = _run_yolo_inference(report.image_url)
         if server_confidence is not None:
             report.confidence = server_confidence
             report.save(update_fields=['confidence', 'updated_at'])
+        else:
+            model_available = False
     except requests.RequestException as exc:
         logger.warning('process_report_ml: image download failed for report %s: %s — retrying', report_id, exc)
         raise self.retry(exc=exc)
     except Exception as exc:
-        logger.exception('process_report_ml: inference error for report %s: %s — using client confidence', report_id, exc)
+        logger.exception('process_report_ml: inference error for report %s: %s — flagging for review', report_id, exc)
+        model_available = False
+
+    # If ML is unavailable, send to human review queue — never auto-verify on client confidence.
+    if not model_available:
+        report.status = STATUS_CHOICES.NEEDS_REVIEW
+        report.save(update_fields=['status', 'updated_at'])
+        logger.info('Report %s → NEEDS_REVIEW (ML model unavailable)', report_id)
+        return {'report_id': report_id, 'status': report.status, 'confidence': report.confidence}
 
     confidence = report.confidence
 

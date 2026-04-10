@@ -9,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import SeveritySelector from '../src/components/report/SeveritySelector';
 import { Severity } from '../src/types/report.types';
-import { useReportsStore } from '../src/store/reportsStore';
 import axiosClient from '../src/api/axiosClient';
 
 const SEVERITY_DESCRIPTIONS: Record<Severity, string> = {
@@ -31,8 +30,6 @@ export default function ReportFormScreen() {
 
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const addReport = useReportsStore((state) => state.addReport);
-
     const handleSubmit = async () => {
         setLoading(true);
         try {
@@ -60,7 +57,6 @@ export default function ReportFormScreen() {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
 
-            addReport(response.data);
             Alert.alert(
                 'Report Submitted',
                 'Your pothole has been reported. Our system will verify it shortly.',
