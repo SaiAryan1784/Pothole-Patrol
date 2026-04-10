@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Runtime-only GDAL/GEOS/PROJ — GeoDjango loads these via ctypes, no headers needed
 # libgdal32, libgeos-c1v5, libproj25 are the Debian Bookworm runtime package names
