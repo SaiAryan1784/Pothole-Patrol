@@ -90,6 +90,16 @@ export default function ReportCard({ report }: { report: Report }) {
                         </View>
                     </View>
 
+                    {/* Location line */}
+                    {(report.area_name || report.city) ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                            <Ionicons name="location-outline" size={12} color="#64748b" />
+                            <Text style={{ fontSize: 12, color: '#64748b' }} numberOfLines={1}>
+                                {[report.area_name, report.city].filter(Boolean).join(', ')}
+                            </Text>
+                        </View>
+                    ) : null}
+
                     {/* Description */}
                     <Text style={{ fontSize: 14, color: '#334155', lineHeight: 20, marginBottom: 10 }}>
                         {report.description || 'Pothole reported at this location.'}
@@ -105,6 +115,18 @@ export default function ReportCard({ report }: { report: Report }) {
                             reported {relativeTime(report.created_at)}
                         </Text>
                         <View style={{ flex: 1 }} />
+                        {report.status === 'VERIFIED' ? (
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 3,
+                                backgroundColor: '#dcfce7', paddingHorizontal: 7, paddingVertical: 2,
+                                borderRadius: 12, marginRight: 8,
+                            }}>
+                                <Ionicons name="shield-checkmark" size={11} color="#15803d" />
+                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#15803d' }}>
+                                    AI Verified · {Math.round(report.confidence * 100)}%
+                                </Text>
+                            </View>
+                        ) : null}
                         <Ionicons name="thumbs-up-outline" size={12} color="#94a3b8" />
                         <Text style={{ fontSize: 12, color: '#94a3b8', marginLeft: 3 }}>{report.upvotes}</Text>
                     </View>

@@ -12,6 +12,8 @@ export interface Report {
     status: ReportStatus;
     confidence: number;
     upvotes: number;
+    area_name: string;
+    city: string;
     created_at: string;
     updated_at: string;
 }

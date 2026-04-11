@@ -33,6 +33,9 @@ class Report(models.Model):
     
     confidence = models.FloatField(help_text="ML generated confidence score")
     upvotes = models.PositiveIntegerField(default=0)
+
+    area_name = models.CharField(max_length=200, blank=True, default='')
+    city = models.CharField(max_length=100, blank=True, default='')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

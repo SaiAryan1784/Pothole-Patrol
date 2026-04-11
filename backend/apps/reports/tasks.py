@@ -25,6 +25,42 @@ REVIEW_MIN = settings.ML_CONFIDENCE_THRESHOLD_REVIEW        # default 0.50
 POINTS_PER_VERIFIED_REPORT = 10
 
 
+def _reverse_geocode(lat: float, lng: float) -> tuple[str, str]:
+    """
+    Call Google Maps Geocoding API to get human-readable area name and city.
+
+    Returns (area_name, city). Falls back to empty strings on any error so
+    the caller never has to handle an exception path.
+    """
+    api_key = settings.GOOGLE_MAPS_API_KEY
+    if not api_key:
+        return ('', '')
+    try:
+        resp = requests.get(
+            'https://maps.googleapis.com/maps/api/geocode/json',
+            params={'latlng': f'{lat},{lng}', 'key': api_key},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get('status') != 'OK' or not data.get('results'):
+            return ('', '')
+
+        components = data['results'][0].get('address_components', [])
+        area_name = ''
+        city = ''
+        for comp in components:
+            types = comp.get('types', [])
+            if not area_name and ('sublocality' in types or 'neighborhood' in types or 'sublocality_level_1' in types):
+                area_name = comp['long_name']
+            if not city and ('locality' in types or 'administrative_area_level_2' in types):
+                city = comp['long_name']
+        return (area_name, city)
+    except Exception as exc:
+        logger.warning('_reverse_geocode: failed for (%s, %s): %s', lat, lng, exc)
+        return ('', '')
+
+
 def _run_yolo_inference(image_url: str) -> float | None:
     """
     Download image from Firebase Storage URL and run YOLOv8 inference.
@@ -109,8 +145,13 @@ def process_report_ml(self, report_id: int) -> dict:
 
     if confidence >= AUTO_VERIFY:
         report.status = STATUS_CHOICES.VERIFIED
-        report.save(update_fields=['status', 'updated_at'])
-        logger.info('Report %s auto-verified (confidence=%.2f)', report_id, confidence)
+        lat = report.location.y
+        lng = report.location.x
+        area_name, city = _reverse_geocode(lat, lng)
+        report.area_name = area_name
+        report.city = city
+        report.save(update_fields=['status', 'area_name', 'city', 'updated_at'])
+        logger.info('Report %s auto-verified (confidence=%.2f, area=%r, city=%r)', report_id, confidence, area_name, city)
 
         # Award points only if the report was submitted by a logged-in user
         if report.user is not None:

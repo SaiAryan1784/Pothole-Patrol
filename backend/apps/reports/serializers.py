@@ -27,9 +27,10 @@ class ReportSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'latitude', 'longitude',
             'image_url', 'description', 'severity', 'status',
-            'confidence', 'upvotes', 'created_at', 'updated_at',
+            'confidence', 'upvotes', 'area_name', 'city',
+            'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'user', 'status', 'upvotes', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'status', 'upvotes', 'area_name', 'city', 'created_at', 'updated_at']
 
     def get_latitude(self, obj) -> float:
         return obj.location.y

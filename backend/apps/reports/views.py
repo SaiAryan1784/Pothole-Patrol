@@ -12,10 +12,12 @@ Deduplication: before creating, checks for existing verified reports within 50m.
 import logging
 
 from django.conf import settings
+from django.db.models import Sum
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -155,3 +157,73 @@ class ReportUpvoteView(APIView):
             report.save(update_fields=['upvotes', 'updated_at'])
 
         return Response({'upvotes': report.upvotes}, status=status.HTTP_200_OK)
+
+
+class FeedPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
+class FeedView(generics.ListAPIView):
+    """
+    GET /v1/reports/feed/
+
+    Paginated feed of verified reports, newest first.
+    Optional filters:
+      ?city=Delhi
+      ?severity=LOW,MEDIUM,HIGH,CRITICAL  (comma-separated)
+    """
+    serializer_class = ReportSerializer
+    permission_classes = [AllowAny]
+    pagination_class = FeedPagination
+
+    def get_queryset(self):
+        qs = Report.objects.filter(status=STATUS_CHOICES.VERIFIED).order_by('-created_at')
+
+        city = self.request.query_params.get('city')
+        if city:
+            qs = qs.filter(city__iexact=city)
+
+        severity_param = self.request.query_params.get('severity')
+        if severity_param:
+            severities = [s.strip().upper() for s in severity_param.split(',') if s.strip()]
+            if severities:
+                qs = qs.filter(severity__in=severities)
+
+        return qs
+
+
+@method_decorator(cache_page(300), name='dispatch')
+class StatsView(APIView):
+    """
+    GET /v1/stats/
+
+    Public endpoint returning platform-wide aggregate statistics.
+    Response is cached for 5 minutes.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from apps.accounts.models import CustomUser
+
+        total_users = CustomUser.objects.count()
+        verified_reports = Report.objects.filter(status=STATUS_CHOICES.VERIFIED).count()
+        total_reports = Report.objects.count()
+        cities_covered = (
+            Report.objects
+            .filter(status=STATUS_CHOICES.VERIFIED)
+            .exclude(city='')
+            .values('city')
+            .distinct()
+            .count()
+        )
+        total_upvotes = Report.objects.aggregate(total=Sum('upvotes'))['total'] or 0
+
+        return Response({
+            'total_users': total_users,
+            'verified_reports': verified_reports,
+            'total_reports': total_reports,
+            'cities_covered': cities_covered,
+            'total_upvotes': total_upvotes,
+        })

@@ -7,6 +7,7 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from apps.reports.views import StatsView
 
 
 def health_check(_request):
@@ -18,6 +19,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     # API v1 Versioning
+    path('v1/stats/', StatsView.as_view(), name='stats'),
     path('v1/accounts/', include('apps.accounts.urls')),
     path('v1/reports/', include('apps.reports.urls')),
     path('v1/heatmap/', include('apps.heatmap.urls')),
