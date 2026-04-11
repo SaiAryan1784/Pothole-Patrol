@@ -30,6 +30,12 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.railway.app',
+    'https://*.up.railway.app',
+    'https://pothole-patrol-production.up.railway.app',
+]
+
 # ---------------------------------------------------------------------------
 # Email (SMTP — for civic body dispatch)
 # ---------------------------------------------------------------------------
