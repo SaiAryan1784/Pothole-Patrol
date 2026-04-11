@@ -25,6 +25,30 @@ REVIEW_MIN = settings.ML_CONFIDENCE_THRESHOLD_REVIEW        # default 0.50
 POINTS_PER_VERIFIED_REPORT = 10
 
 
+def _delete_cloudinary_image(image_url: str) -> None:
+    """
+    Delete a Cloudinary image by its secure URL.
+
+    Cloudinary URLs look like:
+      https://res.cloudinary.com/<cloud>/image/upload/v1234/pothole-patrol/abc.jpg
+    The public_id is everything after /upload/v<version>/ without the extension.
+    """
+    try:
+        after_upload = image_url.split('/upload/')[1]
+        parts = after_upload.split('/')
+        if parts[0].startswith('v') and parts[0][1:].isdigit():
+            parts = parts[1:]
+        last = parts[-1]
+        parts[-1] = last.rsplit('.', 1)[0]
+        public_id = '/'.join(parts)
+
+        import cloudinary.uploader
+        cloudinary.uploader.destroy(public_id, resource_type='image')
+        logger.info('_delete_cloudinary_image: deleted %s', public_id)
+    except Exception as exc:
+        logger.warning('_delete_cloudinary_image: failed for %s: %s', image_url, exc)
+
+
 def _reverse_geocode(lat: float, lng: float) -> tuple[str, str]:
     """
     Call Google Maps Geocoding API to get human-readable area name and city.
@@ -166,6 +190,34 @@ def process_report_ml(self, report_id: int) -> dict:
     else:
         report.status = STATUS_CHOICES.REJECTED
         report.save(update_fields=['status', 'updated_at'])
-        logger.info('Report %s rejected (confidence=%.2f)', report_id, confidence)
+        logger.info('Report %s rejected (confidence=%.2f) — scheduled for deletion in 5 h', report_id, confidence)
+        # Keep the record for 5 hours so the user can see the rejection on the
+        # status screen, then purge both the DB row and the Cloudinary image.
+        delete_rejected_report.apply_async(args=[report_id], countdown=5 * 60 * 60)
 
     return {'report_id': report_id, 'status': report.status, 'confidence': confidence}
+
+
+@shared_task
+def delete_rejected_report(report_id: int) -> dict:
+    """
+    Purge a REJECTED report 5 hours after it was rejected.
+
+    Deletes the Cloudinary image first (best-effort), then the DB row.
+    Only acts on reports still in REJECTED status — if an admin manually
+    changed the status in the meantime, the record is left alone.
+    """
+    from apps.reports.models import Report, STATUS_CHOICES
+
+    try:
+        report = Report.objects.get(pk=report_id, status=STATUS_CHOICES.REJECTED)
+    except Report.DoesNotExist:
+        logger.info('delete_rejected_report: report %s not found or no longer REJECTED — skipping', report_id)
+        return {'skipped': True}
+
+    image_url = report.image_url
+    report.delete()
+    logger.info('delete_rejected_report: deleted report %s from DB', report_id)
+
+    _delete_cloudinary_image(image_url)
+    return {'report_id': report_id, 'deleted': True}

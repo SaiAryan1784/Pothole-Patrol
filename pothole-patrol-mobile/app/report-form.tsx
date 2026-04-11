@@ -1,6 +1,6 @@
 import {
     View, Text, TextInput, Image, ScrollView,
-    Alert, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform,
+    TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -57,11 +57,16 @@ export default function ReportFormScreen() {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
 
-            Alert.alert(
-                'Report Submitted',
-                'Your pothole has been reported. Our system will verify it shortly.',
-                [{ text: 'Back to Map', onPress: () => router.replace('/(tabs)') }],
-            );
+            // Navigate to the status screen so the user can watch verification happen live.
+            // Both 200 (dedup upvote) and 201 (new report) return a report object.
+            const reportData = response.data?.report ?? response.data;
+            const reportId = String(reportData?.id ?? '');
+            const imageUrl = String(reportData?.image_url ?? imageUri ?? '');
+
+            router.replace({
+                pathname: '/submission-status',
+                params: { reportId, imageUrl },
+            });
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Failed to submit report';
             Alert.alert('Submission Failed', message);

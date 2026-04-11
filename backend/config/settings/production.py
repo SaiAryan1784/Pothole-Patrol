@@ -6,8 +6,8 @@ DEBUG = False
 SECRET_KEY = os.environ['SECRET_KEY']
 
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
-# Railway's internal health checker always uses this host
-ALLOWED_HOSTS += ['healthcheck.railway.app', '.railway.app']
+# Railway domains — leading dot means "match all subdomains" in Django
+ALLOWED_HOSTS += ['healthcheck.railway.app', '.railway.app', '.up.railway.app']
 
 # ---------------------------------------------------------------------------
 # Security

@@ -93,7 +93,9 @@ class ReportListCreateView(generics.ListCreateAPIView):
                 status=status.HTTP_200_OK,
             )
 
-        report = serializer.save(user=None)
+        report = serializer.save(
+            user=request.user if request.user.is_authenticated else None
+        )
 
         # Trigger async ML confidence routing
         process_report_ml.delay(report.pk)

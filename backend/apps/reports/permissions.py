@@ -1,6 +1,15 @@
 """
-Rate limiting permission: max 20 anonymous report submissions per IP per day.
-Uses Redis-backed counter via Django cache.
+Rate limiting permission: max 20 report submissions per user per day.
+
+Key strategy:
+- Authenticated requests (Firebase Anonymous Auth) → keyed by Firebase UID.
+  This is the normal production path — every device has a stable anonymous UID
+  that persists across app restarts.
+- Unauthenticated requests (no Bearer token) → keyed by IP address as a
+  fallback safety net. This path should never be hit in production once the
+  mobile app always sends a token, but is kept for defence-in-depth.
+
+Redis-backed counter via Django cache.
 """
 import logging
 from datetime import date, datetime, timezone
@@ -28,14 +37,23 @@ class AnonDailyRateLimit(BasePermission):
         if request.method != 'POST':
             return True
 
-        client_ip = _get_client_ip(request)
+        # Prefer UID-based rate limiting (stable across IPs, accurate per device).
+        # Firebase anonymous users are always authenticated — request.user.pk is
+        # their firebase_uid (the CustomUser primary key).
+        if request.user and request.user.is_authenticated:
+            limit_key = f'report_rate_limit:uid:{request.user.pk}'
+        else:
+            client_ip = _get_client_ip(request)
+            limit_key = f'report_rate_limit:ip:{client_ip}'
+
         today = date.today().isoformat()
-        cache_key = f'report_rate_limit:{client_ip}:{today}'
+        cache_key = f'{limit_key}:{today}'
 
         count = cache.get(cache_key, 0)
         if count >= DAILY_LIMIT:
             return False
 
+        # Expire the counter at midnight so the count resets each day.
         now = datetime.now(timezone.utc)
         midnight = datetime.combine(now.date(), datetime.max.time(), tzinfo=timezone.utc)
         seconds_until_midnight = int((midnight - now).total_seconds()) + 1
