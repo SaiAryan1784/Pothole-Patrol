@@ -15,8 +15,9 @@ import axiosClient from '../../src/api/axiosClient';
 
 interface AppStats {
     verified_reports: number;
-    total_users: number;
+    total_reports: number;
     cities_covered: number;
+    total_upvotes: number;
 }
 
 function formatCount(n: number): string {
@@ -47,19 +48,21 @@ function StatsStrip({ stats }: { stats: AppStats | null }) {
             </View>
             <View style={{ width: 1, height: 14, backgroundColor: '#e2e8f0' }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Ionicons name="people" size={13} color="#2563eb" />
+                <Ionicons name="thumbs-up" size={13} color="#2563eb" />
                 <Text style={{ fontSize: 13, fontWeight: '700', color: '#2563eb' }}>
-                    {formatCount(stats.total_users)}
+                    {formatCount(stats.total_upvotes)}
                 </Text>
-                <Text style={{ fontSize: 11, color: '#64748b' }}>users</Text>
+                <Text style={{ fontSize: 11, color: '#64748b' }}>upvotes</Text>
             </View>
             <View style={{ width: 1, height: 14, backgroundColor: '#e2e8f0' }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <Ionicons name="location" size={13} color="#7c3aed" />
                 <Text style={{ fontSize: 13, fontWeight: '700', color: '#7c3aed' }}>
-                    {stats.cities_covered}
+                    {stats.cities_covered || stats.total_reports}
                 </Text>
-                <Text style={{ fontSize: 11, color: '#64748b' }}>cities</Text>
+                <Text style={{ fontSize: 11, color: '#64748b' }}>
+                    {stats.cities_covered ? 'cities' : 'reports'}
+                </Text>
             </View>
         </View>
     );

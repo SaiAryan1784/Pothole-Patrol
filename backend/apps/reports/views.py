@@ -89,7 +89,8 @@ class ReportListCreateView(generics.ListCreateAPIView):
             nearby.upvotes += 1
             nearby.save(update_fields=['upvotes', 'updated_at'])
             return Response(
-                {'detail': 'Nearby report upvoted.', 'report': ReportSerializer(nearby).data},
+                {'detail': 'Nearby report upvoted.',
+                 'report': ReportSerializer(nearby, context={'request': request}).data},
                 status=status.HTTP_200_OK,
             )
 
@@ -100,7 +101,7 @@ class ReportListCreateView(generics.ListCreateAPIView):
         # Trigger async ML confidence routing
         process_report_ml.delay(report.pk)
 
-        data = ReportSerializer(report).data
+        data = ReportSerializer(report, context={'request': request}).data
         headers = self.get_success_headers(data)
         return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -110,6 +111,31 @@ class ReportDetailView(generics.RetrieveAPIView):
     serializer_class = ReportSerializer
     permission_classes = [AllowAny]
     queryset = Report.objects.all()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+
+class MyReportsView(generics.ListAPIView):
+    """
+    GET /v1/reports/mine/
+
+    Returns all reports submitted by the authenticated user, newest first.
+    Includes every status (PENDING, NEEDS_REVIEW, VERIFIED, REJECTED, REPAIRED)
+    so the user can track the real-time progress of their submissions.
+    """
+    serializer_class = ReportSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Report.objects.filter(user=self.request.user).order_by('-created_at')
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
 
 class NearbyReportsView(generics.ListAPIView):
@@ -213,9 +239,6 @@ class StatsView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from apps.accounts.models import CustomUser
-
-        total_users = CustomUser.objects.count()
         verified_reports = Report.objects.filter(status=STATUS_CHOICES.VERIFIED).count()
         total_reports = Report.objects.count()
         cities_covered = (
@@ -229,7 +252,6 @@ class StatsView(APIView):
         total_upvotes = Report.objects.aggregate(total=Sum('upvotes'))['total'] or 0
 
         return Response({
-            'total_users': total_users,
             'verified_reports': verified_reports,
             'total_reports': total_reports,
             'cities_covered': cities_covered,

@@ -166,34 +166,52 @@ def process_report_ml(self, report_id: int) -> dict:
         return {'report_id': report_id, 'status': report.status, 'confidence': report.confidence}
 
     confidence = report.confidence
+    logger.info('process_report_ml: routing report %s with confidence=%.4f (AUTO_VERIFY=%.2f, REVIEW_MIN=%.2f)',
+                report_id, confidence, AUTO_VERIFY, REVIEW_MIN)
 
-    if confidence >= AUTO_VERIFY:
-        report.status = STATUS_CHOICES.VERIFIED
-        lat = report.location.y
-        lng = report.location.x
-        area_name, city = _reverse_geocode(lat, lng)
-        report.area_name = area_name
-        report.city = city
-        report.save(update_fields=['status', 'area_name', 'city', 'updated_at'])
-        logger.info('Report %s auto-verified (confidence=%.2f, area=%r, city=%r)', report_id, confidence, area_name, city)
+    try:
+        if confidence >= AUTO_VERIFY:
+            report.status = STATUS_CHOICES.VERIFIED
+            lat = report.location.y
+            lng = report.location.x
+            area_name, city = _reverse_geocode(lat, lng)
+            report.area_name = area_name
+            report.city = city
+            report.save(update_fields=['status', 'area_name', 'city', 'updated_at'])
+            logger.info('Report %s → VERIFIED (confidence=%.2f, area=%r, city=%r)',
+                        report_id, confidence, area_name, city)
 
-        # Award points only if the report was submitted by a logged-in user
-        if report.user is not None:
-            award_points_for_report.delay(report_id)
-        dispatch_report_to_civic_body.delay(report_id)
+            # Award points only if the report was submitted by a logged-in user
+            try:
+                if report.user is not None:
+                    award_points_for_report.delay(report_id)
+                dispatch_report_to_civic_body.delay(report_id)
+            except Exception as exc:
+                logger.warning('process_report_ml: post-verify dispatch failed for report %s: %s', report_id, exc)
 
-    elif confidence >= REVIEW_MIN:
-        report.status = STATUS_CHOICES.NEEDS_REVIEW
-        report.save(update_fields=['status', 'updated_at'])
-        logger.info('Report %s flagged for review (confidence=%.2f)', report_id, confidence)
+        elif confidence >= REVIEW_MIN:
+            report.status = STATUS_CHOICES.NEEDS_REVIEW
+            report.save(update_fields=['status', 'updated_at'])
+            logger.info('Report %s → NEEDS_REVIEW (confidence=%.2f)', report_id, confidence)
 
-    else:
-        report.status = STATUS_CHOICES.REJECTED
-        report.save(update_fields=['status', 'updated_at'])
-        logger.info('Report %s rejected (confidence=%.2f) — scheduled for deletion in 5 h', report_id, confidence)
-        # Keep the record for 5 hours so the user can see the rejection on the
-        # status screen, then purge both the DB row and the Cloudinary image.
-        delete_rejected_report.apply_async(args=[report_id], countdown=5 * 60 * 60)
+        else:
+            report.status = STATUS_CHOICES.REJECTED
+            report.save(update_fields=['status', 'updated_at'])
+            logger.info('Report %s → REJECTED (confidence=%.2f) — scheduled for deletion in 5 h',
+                        report_id, confidence)
+            delete_rejected_report.apply_async(args=[report_id], countdown=5 * 60 * 60)
+
+    except Exception as exc:
+        # Status routing or DB save failed — fall back to NEEDS_REVIEW so the
+        # report is not silently stuck in PENDING forever.
+        logger.exception('process_report_ml: status save failed for report %s (confidence=%.4f): %s',
+                         report_id, confidence, exc)
+        try:
+            report.status = STATUS_CHOICES.NEEDS_REVIEW
+            report.save(update_fields=['status', 'updated_at'])
+        except Exception as inner_exc:
+            logger.exception('process_report_ml: fallback NEEDS_REVIEW save also failed for %s: %s',
+                             report_id, inner_exc)
 
     return {'report_id': report_id, 'status': report.status, 'confidence': confidence}
 
