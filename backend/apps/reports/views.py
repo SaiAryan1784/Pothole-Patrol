@@ -181,7 +181,7 @@ class FeedView(generics.ListAPIView):
     pagination_class = FeedPagination
 
     def get_queryset(self):
-        qs = Report.objects.filter(status=STATUS_CHOICES.VERIFIED).order_by('-created_at')
+        qs = Report.objects.filter(status=STATUS_CHOICES.VERIFIED)
 
         city = self.request.query_params.get('city')
         if city:
@@ -192,6 +192,12 @@ class FeedView(generics.ListAPIView):
             severities = [s.strip().upper() for s in severity_param.split(',') if s.strip()]
             if severities:
                 qs = qs.filter(severity__in=severities)
+
+        sort = self.request.query_params.get('sort', 'latest')
+        if sort == 'popular':
+            qs = qs.order_by('-upvotes', '-created_at')
+        else:
+            qs = qs.order_by('-created_at')
 
         return qs
 

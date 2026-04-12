@@ -1,6 +1,6 @@
 import {
     View, Text, TextInput, Image, ScrollView,
-    TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform,
+    TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -21,7 +21,8 @@ const SEVERITY_DESCRIPTIONS: Record<Severity, string> = {
 export default function ReportFormScreen() {
     const { imageUri, confidence } = useLocalSearchParams();
     const parsedConfidence = parseFloat(confidence as string);
-    const initialSeverity: Severity = parsedConfidence >= 0.7 ? 'HIGH' : 'LOW';
+    const mlThreshold = parseFloat(process.env.EXPO_PUBLIC_ML_CONFIDENCE_THRESHOLD ?? '0.5');
+    const initialSeverity: Severity = parsedConfidence >= mlThreshold ? 'HIGH' : 'LOW';
 
     const [severity, setSeverity] = useState<Severity>(initialSeverity);
     const [description, setDescription] = useState('');

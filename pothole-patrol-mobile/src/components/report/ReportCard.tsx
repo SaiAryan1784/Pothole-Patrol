@@ -1,4 +1,5 @@
-import { View, Text, Image } from 'react-native';
+import { View, Text, Image, TouchableOpacity } from 'react-native';
+import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Report } from '../../types/report.types';
 
@@ -28,9 +29,25 @@ function relativeTime(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-export default function ReportCard({ report }: { report: Report }) {
+export default function ReportCard({
+    report,
+    onUpvote,
+}: {
+    report: Report;
+    onUpvote?: (id: string) => void;
+}) {
     const sev = SEVERITY_CONFIG[report.severity];
     const st = STATUS_CONFIG[report.status];
+    // Optimistic upvote state — flip immediately on tap
+    const [upvoted, setUpvoted] = useState(report.user_has_upvoted);
+    const [upvoteCount, setUpvoteCount] = useState(report.upvotes);
+
+    const handleUpvote = () => {
+        if (upvoted) return; // already upvoted — no toggle-down
+        setUpvoted(true);
+        setUpvoteCount((c) => c + 1);
+        onUpvote?.(report.id);
+    };
 
     return (
         <View style={{
@@ -127,8 +144,21 @@ export default function ReportCard({ report }: { report: Report }) {
                                 </Text>
                             </View>
                         ) : null}
-                        <Ionicons name="thumbs-up-outline" size={12} color="#94a3b8" />
-                        <Text style={{ fontSize: 12, color: '#94a3b8', marginLeft: 3 }}>{report.upvotes}</Text>
+                        <TouchableOpacity
+                            onPress={handleUpvote}
+                            disabled={upvoted}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}
+                        >
+                            <Ionicons
+                                name={upvoted ? 'thumbs-up' : 'thumbs-up-outline'}
+                                size={14}
+                                color={upvoted ? '#2563EB' : '#94a3b8'}
+                            />
+                            <Text style={{ fontSize: 12, color: upvoted ? '#2563EB' : '#94a3b8' }}>
+                                {upvoteCount}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </View>

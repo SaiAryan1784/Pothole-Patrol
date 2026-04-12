@@ -73,6 +73,7 @@ export default function FeedScreen() {
     const [reports, setReports] = useState<Report[]>([]);
     const [selectedCity, setSelectedCity] = useState('All Cities');
     const [activeSeverities, setActiveSeverities] = useState<Set<Severity>>(new Set());
+    const [sort, setSort] = useState<'latest' | 'popular'>('latest');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [nextUrl, setNextUrl] = useState<string | null>(null);
@@ -84,8 +85,9 @@ export default function FeedScreen() {
         const params: Record<string, string> = { page: String(page) };
         if (selectedCity !== 'All Cities') params.city = selectedCity;
         if (activeSeverities.size > 0) params.severity = [...activeSeverities].join(',');
+        if (sort === 'popular') params.sort = 'popular';
         return params;
-    }, [selectedCity, activeSeverities]);
+    }, [selectedCity, activeSeverities, sort]);
 
     const loadPage = useCallback(async (page: number, replace: boolean) => {
         try {
@@ -110,7 +112,7 @@ export default function FeedScreen() {
     useEffect(() => {
         setLoading(true);
         loadPage(1, true).finally(() => setLoading(false));
-    }, [selectedCity, activeSeverities]);
+    }, [selectedCity, activeSeverities, sort]);
 
     const loadMore = useCallback(async () => {
         if (!nextUrl || loadingMore) return;
@@ -126,6 +128,22 @@ export default function FeedScreen() {
             return next;
         });
     };
+
+    const handleUpvote = useCallback(async (reportId: string) => {
+        try {
+            await axiosClient.post(`/reports/${reportId}/upvote/`);
+            // Sync the server count back into state
+            setReports((prev) =>
+                prev.map((r) =>
+                    r.id === reportId
+                        ? { ...r, user_has_upvoted: true, upvotes: r.upvotes + 1 }
+                        : r
+                )
+            );
+        } catch {
+            // Optimistic update already applied in ReportCard — silently ignore on error
+        }
+    }, []);
 
     return (
         <View style={{ flex: 1, backgroundColor: '#f8fafc', paddingTop: insets.top }}>
@@ -180,7 +198,7 @@ export default function FeedScreen() {
                 </ScrollView>
 
                 {/* Severity filters */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 8 }}>
                     {SEVERITIES.map((item) => (
                         <SeverityPill
                             key={item.value}
@@ -190,6 +208,39 @@ export default function FeedScreen() {
                         />
                     ))}
                 </ScrollView>
+
+                {/* Sort toggle */}
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {(['latest', 'popular'] as const).map((option) => {
+                        const active = sort === option;
+                        return (
+                            <TouchableOpacity
+                                key={option}
+                                onPress={() => setSort(option)}
+                                activeOpacity={0.8}
+                                style={{
+                                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                                    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+                                    backgroundColor: active ? '#0f172a' : '#f1f5f9',
+                                    borderWidth: 1,
+                                    borderColor: active ? '#0f172a' : 'transparent',
+                                }}
+                            >
+                                <Ionicons
+                                    name={option === 'latest' ? 'time-outline' : 'flame-outline'}
+                                    size={12}
+                                    color={active ? '#ffffff' : '#64748b'}
+                                />
+                                <Text style={{
+                                    fontSize: 12, fontWeight: '600',
+                                    color: active ? '#ffffff' : '#64748b',
+                                }}>
+                                    {option === 'latest' ? 'Latest' : 'Popular'}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
             </View>
 
             {/* Feed list */}
@@ -202,7 +253,7 @@ export default function FeedScreen() {
                     data={reports}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={{ padding: 16, gap: 12 }}
-                    renderItem={({ item }) => <ReportCard report={item} />}
+                    renderItem={({ item }) => <ReportCard report={item} onUpvote={handleUpvote} />}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#2563EB" />}
                     onEndReached={loadMore}
                     onEndReachedThreshold={0.4}

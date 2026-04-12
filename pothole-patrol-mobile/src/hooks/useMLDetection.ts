@@ -82,5 +82,7 @@ export const useMLDetection = () => {
     }
   }, [modelLoader]);
 
-  return { runInference, isProcessing };
+  const modelLoaded = modelLoader.state === 'loaded' && modelLoader.model !== null;
+
+  return { runInference, isProcessing, modelLoaded };
 };

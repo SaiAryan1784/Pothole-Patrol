@@ -21,22 +21,32 @@ class ReportSerializer(serializers.ModelSerializer):
     latitude = serializers.SerializerMethodField()
     longitude = serializers.SerializerMethodField()
     user = serializers.StringRelatedField(read_only=True)
+    user_has_upvoted = serializers.SerializerMethodField()
 
     class Meta:
         model = Report
         fields = [
             'id', 'user', 'latitude', 'longitude',
             'image_url', 'description', 'severity', 'status',
-            'confidence', 'upvotes', 'area_name', 'city',
+            'confidence', 'upvotes', 'user_has_upvoted', 'area_name', 'city',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'user', 'status', 'upvotes', 'area_name', 'city', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'user', 'status', 'upvotes', 'user_has_upvoted',
+            'area_name', 'city', 'created_at', 'updated_at',
+        ]
 
     def get_latitude(self, obj) -> float:
         return obj.location.y
 
     def get_longitude(self, obj) -> float:
         return obj.location.x
+
+    def get_user_has_upvoted(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        return obj.upvote_records.filter(user=request.user).exists()
 
 
 class ReportCreateSerializer(serializers.Serializer):

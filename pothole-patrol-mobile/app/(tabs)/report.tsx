@@ -7,6 +7,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { compressImage } from '../../src/utils/imageHelpers';
+import { useMLDetection } from '../../src/hooks/useMLDetection';
+
+const ML_GATE_THRESHOLD = parseFloat(process.env.EXPO_PUBLIC_ML_CONFIDENCE_THRESHOLD ?? '0.5');
 
 function PulsingRing() {
     const scale = useSharedValue(1);
@@ -78,6 +81,10 @@ export default function CameraScreen() {
     const router = useRouter();
     const [capturing, setCapturing] = useState(false);
     const [photoUri, setPhotoUri] = useState<string | null>(null);
+    const [mlConfidence, setMlConfidence] = useState<number>(0);
+    const [analyzing, setAnalyzing] = useState(false);
+    const [inferenceRan, setInferenceRan] = useState(false);
+    const { runInference, modelLoaded } = useMLDetection();
 
     const handleCapture = async () => {
         if (!cameraRef.current || capturing) return;
@@ -87,17 +94,34 @@ export default function CameraScreen() {
             if (photo?.uri) {
                 const compressed = await compressImage(photo.uri);
                 setPhotoUri(compressed);
+                setInferenceRan(false);
+
+                // Run on-device TFLite inference in the background.
+                // If the model isn't bundled, runInference returns { confidence: 0 }
+                // gracefully — the server will verify regardless.
+                setAnalyzing(true);
+                try {
+                    const result = await runInference(compressed);
+                    setMlConfidence(result.confidence);
+                } finally {
+                    setAnalyzing(false);
+                    setInferenceRan(true);
+                }
             }
         } finally {
             setCapturing(false);
         }
     };
 
+    // Block Continue only when the model ran AND returned a low confidence score.
+    // If the model is unavailable (modelLoaded=false), let the server decide.
+    const blocked = inferenceRan && modelLoaded && mlConfidence < ML_GATE_THRESHOLD;
+
     const handleContinue = () => {
-        if (!photoUri) return;
+        if (!photoUri || blocked) return;
         router.push({
             pathname: '/report-form',
-            params: { imageUri: photoUri, confidence: '0.75' },
+            params: { imageUri: photoUri, confidence: String(mlConfidence) },
         });
     };
 
@@ -194,28 +218,68 @@ export default function CameraScreen() {
                         </TouchableOpacity>
                     </View>
                 ) : (
-                    <View style={{ flexDirection: 'row', gap: 16 }}>
-                        <TouchableOpacity
-                            style={{
-                                backgroundColor: 'rgba(255,255,255,0.12)',
-                                borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
-                                paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14,
-                            }}
-                            onPress={() => setPhotoUri(null)}
-                        >
-                            <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Retake</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={{
-                                backgroundColor: '#2563EB',
-                                paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14,
-                                shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 },
-                                shadowOpacity: 0.4, shadowRadius: 8, elevation: 6,
-                            }}
-                            onPress={handleContinue}
-                        >
-                            <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>Continue →</Text>
-                        </TouchableOpacity>
+                    <View style={{ alignItems: 'center', gap: 10, paddingHorizontal: 16 }}>
+                        {/* Confidence indicator — shown once inference completes */}
+                        {inferenceRan && modelLoaded && (
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 6,
+                                backgroundColor: blocked ? 'rgba(239,68,68,0.9)' : 'rgba(34,197,94,0.9)',
+                                paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+                            }}>
+                                <Ionicons
+                                    name={blocked ? 'close-circle' : 'shield-checkmark'}
+                                    size={14}
+                                    color="white"
+                                />
+                                <Text style={{ color: 'white', fontSize: 13, fontWeight: '600' }}>
+                                    {blocked
+                                        ? `Confidence ${Math.round(mlConfidence * 100)}% — too low`
+                                        : `Confidence ${Math.round(mlConfidence * 100)}%`}
+                                </Text>
+                            </View>
+                        )}
+                        {/* Error message when blocked */}
+                        {blocked && (
+                            <View style={{
+                                backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 10,
+                                paddingHorizontal: 16, paddingVertical: 8, marginBottom: 2,
+                            }}>
+                                <Text style={{ color: '#fca5a5', fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
+                                    This doesn&apos;t look like a pothole. Try a closer, well-lit photo of the road.
+                                </Text>
+                            </View>
+                        )}
+                        <View style={{ flexDirection: 'row', gap: 16 }}>
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: 'rgba(255,255,255,0.12)',
+                                    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+                                    paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14,
+                                }}
+                                onPress={() => { setPhotoUri(null); setMlConfidence(0); setInferenceRan(false); }}
+                            >
+                                <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Retake</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: blocked ? '#64748b' : '#2563EB',
+                                    flexDirection: 'row',
+                                    alignItems: 'center', gap: 8,
+                                    paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14,
+                                    shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: analyzing || blocked ? 0 : 0.4,
+                                    shadowRadius: 8, elevation: analyzing || blocked ? 0 : 6,
+                                    opacity: analyzing ? 0.7 : 1,
+                                }}
+                                onPress={handleContinue}
+                                disabled={analyzing || blocked}
+                            >
+                                {analyzing && <ActivityIndicator color="white" size="small" />}
+                                <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>
+                                    {analyzing ? 'Analysing…' : 'Continue →'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 )}
             </View>
