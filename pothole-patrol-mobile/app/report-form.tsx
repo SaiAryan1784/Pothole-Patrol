@@ -50,7 +50,7 @@ export default function ReportFormScreen() {
             formData.append('latitude', String(location.coords.latitude));
             formData.append('longitude', String(location.coords.longitude));
             formData.append('severity', severity);
-            formData.append('confidence', String(parsedConfidence));
+            formData.append('confidence', String(Math.min(1.0, Math.max(0.0, parsedConfidence))));
             if (description) formData.append('description', description);
 
             setUploadStep('submitting');

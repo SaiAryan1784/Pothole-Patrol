@@ -209,7 +209,7 @@ CELERY_TIMEZONE = TIME_ZONE
 ML_CONFIDENCE_THRESHOLD_AUTO_VERIFY = float(
     os.environ.get('ML_CONFIDENCE_THRESHOLD', '0.70')
 )
-ML_CONFIDENCE_THRESHOLD_REVIEW = 0.50  # Below this → rejected
+ML_CONFIDENCE_THRESHOLD_REVIEW = float(os.environ.get('ML_CONFIDENCE_THRESHOLD_REVIEW', '0.50'))
 ML_MODEL_PATH = os.environ.get('ML_MODEL_PATH', '')
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,8 @@ function extractConfidence(output: Float32Array): number {
   for (let i = 4; i < output.length; i += 5) {
     if (output[i] > maxConf) maxConf = output[i];
   }
-  return maxConf;
+  // Clamp to [0, 1] — TFLite sigmoid outputs can marginally exceed 1.0 due to fp precision
+  return Math.min(1.0, Math.max(0.0, maxConf));
 }
 
 // Attempt to load react-native-fast-tflite — may be absent in Expo Go / web.

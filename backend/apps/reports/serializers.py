@@ -54,7 +54,9 @@ class ReportCreateSerializer(serializers.Serializer):
     longitude = serializers.FloatField()
     image_url = serializers.URLField(max_length=500)
     severity = serializers.ChoiceField(choices=['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])
-    confidence = serializers.FloatField(min_value=0.0, max_value=1.0)
+    # No max_value — server runs its own ML and overwrites this; client value is just a hint.
+    # Mobile clamps to [0,1] before sending, but we don't hard-reject slightly-out-of-range values.
+    confidence = serializers.FloatField(min_value=0.0)
     description = serializers.CharField(max_length=1000, required=False, default='')
 
     def validate(self, data):
