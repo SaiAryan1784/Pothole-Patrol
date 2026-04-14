@@ -84,6 +84,15 @@ class Command(BaseCommand):
 
     def _run_local(self, reports, model_path_override):
         """Call the task function directly in-process — no Celery/Redis needed."""
+        # Redirect Celery broker + result backend to in-memory transport so that
+        # any nested apply_async calls (e.g. delete_rejected_report) don't attempt
+        # to connect to redis.railway.internal, which is unreachable locally.
+        from celery import current_app as celery_app
+        celery_app.conf.update(
+            broker_url='memory://',
+            result_backend='cache+memory://',
+        )
+
         from apps.reports.tasks import process_report_ml as _task_fn
 
         if model_path_override:

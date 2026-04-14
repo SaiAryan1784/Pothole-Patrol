@@ -199,7 +199,6 @@ def process_report_ml(self, report_id: int) -> dict:
             report.save(update_fields=['status', 'updated_at'])
             logger.info('Report %s → REJECTED (confidence=%.2f) — scheduled for deletion in 5 h',
                         report_id, confidence)
-            delete_rejected_report.apply_async(args=[report_id], countdown=5 * 60 * 60)
 
     except Exception as exc:
         # Status routing or DB save failed — fall back to NEEDS_REVIEW so the
@@ -212,6 +211,19 @@ def process_report_ml(self, report_id: int) -> dict:
         except Exception as inner_exc:
             logger.exception('process_report_ml: fallback NEEDS_REVIEW save also failed for %s: %s',
                              report_id, inner_exc)
+
+    # Schedule deletion outside the status-routing try/except so a Redis
+    # connection failure never corrupts the report status.
+    if report.status == STATUS_CHOICES.REJECTED:
+        try:
+            delete_rejected_report.apply_async(
+                args=[report_id], countdown=5 * 60 * 60, ignore_result=True
+            )
+        except Exception as exc:
+            logger.warning(
+                'process_report_ml: could not schedule deletion for rejected report %s: %s',
+                report_id, exc,
+            )
 
     return {'report_id': report_id, 'status': report.status, 'confidence': confidence}
 
