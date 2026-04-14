@@ -55,11 +55,15 @@ class Command(BaseCommand):
 
         queued = 0
         for r in reports:
+            prev_status = r.status
             # Reset to PENDING so the polling UI shows the right state
             r.status = STATUS_CHOICES.PENDING
             r.save(update_fields=['status', 'updated_at'])
-            process_report_ml.delay(r.pk)
+            # Use apply_async with ignore_result=True to avoid the Redis result-backend
+            # pub/sub subscription — this is safe when running `railway run` locally
+            # because the task only needs the broker (write), not the result channel (read).
+            process_report_ml.apply_async(args=[r.pk], ignore_result=True)
             queued += 1
-            self.stdout.write(f'  Queued report {r.id} (was {r.status})')
+            self.stdout.write(f'  Queued report {r.id} (was {prev_status})')
 
         self.stdout.write(self.style.SUCCESS(f'Enqueued {queued} task(s). Watch Celery worker logs for results.'))
