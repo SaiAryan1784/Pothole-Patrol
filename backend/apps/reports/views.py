@@ -48,11 +48,52 @@ class ReportListCreateView(generics.ListCreateAPIView):
         return Report.objects.filter(status=STATUS_CHOICES.VERIFIED).order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
-        # Upload image to Cloudinary first
         image_file = request.FILES.get('image')
         if not image_file:
             return Response({'detail': 'image file is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # --- Parse location first, before any image upload, so dedup can short-circuit. ---
+        from django.contrib.gis.geos import Point
+        from django.contrib.gis.measure import Distance
+
+        try:
+            latitude = float(request.data.get('latitude'))
+            longitude = float(request.data.get('longitude'))
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'latitude and longitude are required and must be numeric.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+            return Response(
+                {'detail': 'latitude/longitude out of range.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        location = Point(longitude, latitude, srid=4326)
+
+        nearby = Report.objects.filter(
+            status=STATUS_CHOICES.VERIFIED,
+            location__dwithin=(location, Distance(m=DEDUP_RADIUS_METRES)),
+        ).first()
+
+        if nearby:
+            # Increment upvotes on the existing report and return a dedup-shaped
+            # response. No new Report row, no Cloudinary upload — avoids orphan images.
+            nearby.upvotes += 1
+            nearby.save(update_fields=['upvotes', 'updated_at'])
+            return Response(
+                {
+                    'deduped': True,
+                    'existing_report_id': nearby.pk,
+                    'upvotes': nearby.upvotes,
+                    'detail': 'A report already exists within 50 m — we added your upvote.',
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # No dedup match — upload the image and create the report.
         try:
             import cloudinary.uploader
             upload_result = cloudinary.uploader.upload(
@@ -70,29 +111,6 @@ class ReportListCreateView(generics.ListCreateAPIView):
 
         serializer = ReportCreateSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-
-        # --- Deduplication: check for verified reports within 50 metres ---
-        from django.contrib.gis.geos import Point
-        from django.contrib.gis.measure import Distance
-
-        location = Point(
-            serializer.validated_data['longitude'],
-            serializer.validated_data['latitude'],
-            srid=4326,
-        )
-        nearby = Report.objects.filter(
-            status=STATUS_CHOICES.VERIFIED,
-            location__dwithin=(location, Distance(m=DEDUP_RADIUS_METRES)),
-        ).first()
-
-        if nearby:
-            nearby.upvotes += 1
-            nearby.save(update_fields=['upvotes', 'updated_at'])
-            return Response(
-                {'detail': 'Nearby report upvoted.',
-                 'report': ReportSerializer(nearby, context={'request': request}).data},
-                status=status.HTTP_200_OK,
-            )
 
         report = serializer.save(
             user=request.user if request.user.is_authenticated else None

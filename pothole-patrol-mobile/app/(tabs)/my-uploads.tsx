@@ -9,6 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 import axiosClient from '../../src/api/axiosClient';
 import { Report, ReportStatus } from '../../src/types/report.types';
 import { useAuthStore } from '../../src/store/authStore';
+import { useOfflineQueueStore } from '../../src/store/offlineQueueStore';
+import { offlineQueue, QueuedReport } from '../../src/services/offlineQueue';
+import { flushOfflineQueue } from '../../src/hooks/useOfflineQueueSync';
 
 const STATUS_CONFIG: Record<ReportStatus, {
     label: string; color: string; bg: string;
@@ -27,6 +30,82 @@ const SEVERITY_LABELS: Record<string, string> = {
 
 // Statuses that are still being processed
 const PENDING_STATUSES: ReportStatus[] = ['PENDING'];
+
+function PendingUploadCard({
+    item,
+    onRetry,
+    onDiscard,
+}: {
+    item: QueuedReport;
+    onRetry: () => void;
+    onDiscard: () => void;
+}) {
+    return (
+        <View style={{
+            backgroundColor: '#ffffff',
+            borderRadius: 14,
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.07,
+            shadowRadius: 6,
+            elevation: 3,
+            flexDirection: 'row',
+            borderLeftWidth: 3,
+            borderLeftColor: '#f59e0b',
+        }}>
+            <View style={{ width: 88, height: 88 }}>
+                <Image
+                    source={{ uri: item.imageUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                />
+            </View>
+            <View style={{ flex: 1, padding: 12, justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                        backgroundColor: '#fef3c7', paddingHorizontal: 8,
+                        paddingVertical: 3, borderRadius: 20,
+                    }}>
+                        <Ionicons name="cloud-upload-outline" size={11} color="#b45309" />
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#b45309' }}>
+                            Waiting to upload
+                        </Text>
+                    </View>
+                    <Text style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>
+                        {relativeTime(new Date(item.createdAt).toISOString())}
+                    </Text>
+                </View>
+                <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }} numberOfLines={1}>
+                    {item.attempts > 0
+                        ? `${item.attempts} attempt${item.attempts === 1 ? '' : 's'} — ${item.lastError ?? 'will retry'}`
+                        : 'Will send when the network returns'}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    <TouchableOpacity
+                        onPress={onRetry}
+                        style={{
+                            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6,
+                            backgroundColor: '#eff6ff',
+                        }}
+                    >
+                        <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '600' }}>Retry now</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={onDiscard}
+                        style={{
+                            paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6,
+                            backgroundColor: '#fee2e2',
+                        }}
+                    >
+                        <Text style={{ fontSize: 11, color: '#dc2626', fontWeight: '600' }}>Discard</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </View>
+    );
+}
 
 function relativeTime(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -141,6 +220,18 @@ export default function MyUploadsScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+    const queuedItems = useOfflineQueueStore((s) => s.items);
+    const refreshQueue = useOfflineQueueStore((s) => s.refresh);
+
+    const handleRetry = useCallback(async () => {
+        await flushOfflineQueue();
+    }, []);
+
+    const handleDiscard = useCallback(async (id: string) => {
+        await offlineQueue.remove(id);
+        await refreshQueue();
+    }, [refreshQueue]);
+
     const fetchReports = useCallback(async () => {
         try {
             const res = await axiosClient.get<Report[]>('/reports/mine/');
@@ -152,9 +243,9 @@ export default function MyUploadsScreen() {
 
     const refresh = useCallback(async () => {
         setRefreshing(true);
-        await fetchReports();
+        await Promise.all([fetchReports(), refreshQueue()]);
         setRefreshing(false);
-    }, [fetchReports]);
+    }, [fetchReports, refreshQueue]);
 
     // Initial load
     useEffect(() => {
@@ -214,7 +305,9 @@ export default function MyUploadsScreen() {
                     My Reports
                 </Text>
                 <Text style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
-                    {reports.length === 0 ? 'No reports yet' : `${reports.length} report${reports.length === 1 ? '' : 's'}`}
+                    {reports.length === 0 && queuedItems.length === 0
+                        ? 'No reports yet'
+                        : `${reports.length} submitted${queuedItems.length > 0 ? ` · ${queuedItems.length} pending upload` : ''}`}
                 </Text>
             </View>
 
@@ -232,6 +325,28 @@ export default function MyUploadsScreen() {
                     )}
                     refreshControl={
                         <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#2563EB" />
+                    }
+                    ListHeaderComponent={
+                        queuedItems.length > 0 ? (
+                            <View style={{ gap: 10, marginBottom: 10 }}>
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5 }}>
+                                    PENDING UPLOAD
+                                </Text>
+                                {queuedItems.map((item) => (
+                                    <PendingUploadCard
+                                        key={item.id}
+                                        item={item}
+                                        onRetry={handleRetry}
+                                        onDiscard={() => handleDiscard(item.id)}
+                                    />
+                                ))}
+                                {reports.length > 0 && (
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#94a3b8', letterSpacing: 0.5, marginTop: 6 }}>
+                                        SUBMITTED
+                                    </Text>
+                                )}
+                            </View>
+                        ) : null
                     }
                     ListEmptyComponent={
                         <View style={{ alignItems: 'center', paddingTop: 80, gap: 12 }}>

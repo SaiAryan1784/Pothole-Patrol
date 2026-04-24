@@ -6,10 +6,12 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import Toast from 'react-native-toast-message';
 import auth from '@react-native-firebase/auth';
 import { useAuthStore } from '../src/store/authStore';
+import { useOfflineQueueSync } from '../src/hooks/useOfflineQueueSync';
 import './global.css';
 
 export default function RootLayout() {
     const { isReady, setFirebaseUser, setReady } = useAuthStore();
+    useOfflineQueueSync();
 
     useEffect(() => {
         /**
@@ -56,6 +58,7 @@ export default function RootLayout() {
             <BottomSheetModalProvider>
                 <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="report-crop" options={{ headerShown: false }} />
                     <Stack.Screen name="report-form" options={{ headerShown: false }} />
                     <Stack.Screen name="submission-status" options={{ headerShown: false }} />
                 </Stack>

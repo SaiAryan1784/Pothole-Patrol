@@ -85,12 +85,27 @@ def _reverse_geocode(lat: float, lng: float) -> tuple[str, str]:
         return ('', '')
 
 
-def _run_yolo_inference(image_url: str) -> float | None:
-    """
-    Download image from Firebase Storage URL and run YOLOv8 inference.
+def _derive_severity(area_frac: float) -> str:
+    """Bucket a detection box's area fraction into a severity level."""
+    buckets = settings.ML_SEVERITY_BUCKETS
+    if area_frac >= buckets['CRITICAL']:
+        return 'CRITICAL'
+    if area_frac >= buckets['HIGH']:
+        return 'HIGH'
+    if area_frac >= buckets['MEDIUM']:
+        return 'MEDIUM'
+    return 'LOW'
 
-    Returns max detection confidence (0.0–1.0), or None if the model is
-    unavailable so the caller can fall back to the client-submitted value.
+
+def _run_yolo_inference(image_url: str) -> tuple[float, str] | None:
+    """
+    Download the Cloudinary image and run YOLOv8 inference.
+
+    Returns (confidence, severity) where severity is derived from the largest
+    detection's box area as a fraction of the frame. Returns None if the model
+    is unavailable so the caller can route to human review.
+
+    If no detection is found, returns (0.0, 'LOW').
     """
     model_path = settings.ML_MODEL_PATH
     if not model_path or not os.path.exists(model_path):
@@ -110,15 +125,29 @@ def _run_yolo_inference(image_url: str) -> float | None:
         model = YOLO(model_path)
         results = model(tmp_path, verbose=False)
 
-        confidences = [
-            box.conf.max().item()
-            for r in results
-            for box in [r.boxes]
-            if len(box.conf)
-        ]
-        server_confidence = max(confidences) if confidences else 0.0
-        logger.info('_run_yolo_inference: server_confidence=%.4f for %s', server_confidence, image_url)
-        return server_confidence
+        # Find the single highest-confidence detection across all result objects.
+        # YOLOv8's xywhn gives normalized (cx, cy, w, h) in [0, 1] so w * h is the
+        # box's area as a fraction of the frame — used to derive severity.
+        best_conf = 0.0
+        best_area_frac = 0.0
+        for r in results:
+            boxes = r.boxes
+            if boxes is None or len(boxes.conf) == 0:
+                continue
+            confs = boxes.conf.cpu().numpy()
+            xywhn = boxes.xywhn.cpu().numpy()
+            for i in range(len(confs)):
+                c = float(confs[i])
+                if c > best_conf:
+                    best_conf = c
+                    best_area_frac = float(xywhn[i, 2] * xywhn[i, 3])
+
+        severity = _derive_severity(best_area_frac) if best_conf > 0 else 'LOW'
+        logger.info(
+            '_run_yolo_inference: conf=%.4f area_frac=%.4f → severity=%s for %s',
+            best_conf, best_area_frac, severity, image_url,
+        )
+        return (best_conf, severity)
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -143,12 +172,16 @@ def process_report_ml(self, report_id: int) -> dict:
 
     # Run server-side inference. If the model is unavailable, route to NEEDS_REVIEW
     # rather than trusting the client-submitted confidence (which is trivially spoofable).
+    # The server also derives severity from the detection box area — the client's
+    # severity choice is never used for routing.
     model_available = True
     try:
-        server_confidence = _run_yolo_inference(report.image_url)
-        if server_confidence is not None:
+        result = _run_yolo_inference(report.image_url)
+        if result is not None:
+            server_confidence, server_severity = result
             report.confidence = server_confidence
-            report.save(update_fields=['confidence', 'updated_at'])
+            report.severity = server_severity
+            report.save(update_fields=['confidence', 'severity', 'updated_at'])
         else:
             model_available = False
     except requests.RequestException as exc:

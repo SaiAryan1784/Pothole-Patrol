@@ -114,6 +114,11 @@ export default function SubmissionStatusScreen() {
     const [pollCount, setPollCount] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+    // Prefer the image returned by the polled report once available — protects
+    // against stale/wrong image params if the screen is ever reached via a
+    // deep link or unexpected navigation state.
+    const displayImageUrl = report?.image_url || imageUrl;
+
     useEffect(() => {
         if (!reportId) {
             setPhase('timeout');
@@ -192,14 +197,14 @@ export default function SubmissionStatusScreen() {
 
             <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 24, paddingTop: 48 }}>
                 {/* Photo */}
-                {imageUrl ? (
+                {displayImageUrl ? (
                     <View style={{
                         width: 200, height: 150, borderRadius: 16, overflow: 'hidden',
                         marginBottom: 32,
                         shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
                         shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
                     }}>
-                        <Image source={{ uri: imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                        <Image source={{ uri: displayImageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                     </View>
                 ) : null}
 

@@ -1,9 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useOfflineQueueStore } from '../../src/store/offlineQueueStore';
 
 export default function TabLayout() {
     const insets = useSafeAreaInsets();
+    const pendingCount = useOfflineQueueStore((s) => s.items.length);
     return (
         <Tabs
             screenOptions={{
@@ -58,6 +60,7 @@ export default function TabLayout() {
                     tabBarIcon: ({ color, size }) => (
                         <Ionicons name="person-outline" size={size} color={color} />
                     ),
+                    tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
                 }}
             />
         </Tabs>

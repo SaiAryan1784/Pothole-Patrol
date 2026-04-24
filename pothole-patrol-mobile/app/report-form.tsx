@@ -7,30 +7,37 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import SeveritySelector from '../src/components/report/SeveritySelector';
-import { Severity } from '../src/types/report.types';
-import axiosClient from '../src/api/axiosClient';
-
-const SEVERITY_DESCRIPTIONS: Record<Severity, string> = {
-    LOW: 'Small crack or minor dip — can be driven over carefully',
-    MEDIUM: 'Noticeable pothole — requires caution',
-    HIGH: 'Large pothole — risk of vehicle damage',
-    CRITICAL: 'Extreme hazard — immediate attention required',
-};
+import type { AxiosError } from 'axios';
+import { submitReport } from '../src/api/reports';
+import { offlineQueue } from '../src/services/offlineQueue';
+import { useOfflineQueueStore } from '../src/store/offlineQueueStore';
 
 export default function ReportFormScreen() {
-    const { imageUri, confidence } = useLocalSearchParams();
-    const parsedConfidence = parseFloat(confidence as string);
-    const mlThreshold = parseFloat(process.env.EXPO_PUBLIC_ML_CONFIDENCE_THRESHOLD ?? '0.5');
-    const initialSeverity: Severity = parsedConfidence >= mlThreshold ? 'HIGH' : 'LOW';
+    const { imageUri } = useLocalSearchParams<{ imageUri: string; confidence?: string }>();
 
-    const [severity, setSeverity] = useState<Severity>(initialSeverity);
     const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [uploadStep, setUploadStep] = useState<'idle' | 'location' | 'uploading' | 'submitting'>('idle');
 
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const refreshQueue = useOfflineQueueStore((s) => s.refresh);
+
+    const enqueueForOffline = async (lat: number, lng: number) => {
+        await offlineQueue.enqueue({
+            imageUri: imageUri as string,
+            latitude: lat,
+            longitude: lng,
+            description: description || undefined,
+        });
+        await refreshQueue();
+        Alert.alert(
+            "Saved — we'll upload when you're back online",
+            'Your report is queued and will be sent automatically when the network returns. You can check its status under My Reports.',
+            [{ text: 'OK', onPress: () => router.replace('/(tabs)/my-uploads') }],
+        );
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
         try {
@@ -40,36 +47,60 @@ export default function ReportFormScreen() {
                 throw new Error('Location permission is required to submit a report');
             }
             const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            const latitude = location.coords.latitude;
+            const longitude = location.coords.longitude;
 
             setUploadStep('uploading');
-            const uriStr = imageUri as string;
-            const filename = uriStr.split('/').pop() || `pothole_${Date.now()}.jpg`;
+            let response;
+            try {
+                setUploadStep('submitting');
+                response = await submitReport({
+                    imageUri: imageUri as string,
+                    latitude,
+                    longitude,
+                    description: description || undefined,
+                });
+            } catch (e) {
+                const err = e as AxiosError;
+                if (!err.response) {
+                    // No server response — treat as offline and queue.
+                    await enqueueForOffline(latitude, longitude);
+                    return;
+                }
+                throw err; // fall through to the outer catch for real server errors
+            }
 
-            const formData = new FormData();
-            formData.append('image', { uri: uriStr, name: filename, type: 'image/jpeg' } as unknown as Blob);
-            formData.append('latitude', String(location.coords.latitude));
-            formData.append('longitude', String(location.coords.longitude));
-            formData.append('severity', severity);
-            formData.append('confidence', String(Math.min(1.0, Math.max(0.0, parsedConfidence))));
-            if (description) formData.append('description', description);
+            // Server returns one of two shapes:
+            //   201 { id, image_url, ... }           → new report, poll for verification
+            //   200 { deduped: true, existing_report_id, upvotes, detail } → nearby report upvoted
+            if (response.status === 200 && response.data?.deduped) {
+                Alert.alert(
+                    'Nearby report already exists',
+                    response.data.detail ?? 'We added your upvote to the existing report.',
+                    [{ text: 'OK', onPress: () => router.replace('/(tabs)/feed') }],
+                );
+                return;
+            }
 
-            setUploadStep('submitting');
-            const response = await axiosClient.post('/reports/', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            const reportData = response.data ?? {};
+            const reportId = reportData.id ? String(reportData.id) : '';
+            const imageUrl = reportData.image_url ? String(reportData.image_url) : '';
 
-            // Navigate to the status screen so the user can watch verification happen live.
-            // Both 200 (dedup upvote) and 201 (new report) return a report object.
-            const reportData = response.data?.report ?? response.data;
-            const reportId = String(reportData?.id ?? '');
-            const imageUrl = String(reportData?.image_url ?? imageUri ?? '');
+            if (!reportId) {
+                // Unexpected shape — don't poll a garbage id.
+                Alert.alert('Submitted', 'Your report is being processed. Check the Feed in a minute.',
+                    [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]);
+                return;
+            }
 
             router.replace({
                 pathname: '/submission-status',
                 params: { reportId, imageUrl },
             });
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Failed to submit report';
+            const err = error as AxiosError<{ detail?: string }>;
+            const message = err.response?.data?.detail
+                ?? (error instanceof Error ? error.message : 'Failed to submit report');
             Alert.alert('Submission Failed', message);
         } finally {
             setLoading(false);
@@ -132,20 +163,26 @@ export default function ReportFormScreen() {
                             backgroundColor: 'rgba(0,0,0,0.35)', paddingHorizontal: 12, paddingVertical: 8,
                         }}>
                             <Text style={{ color: 'white', fontSize: 12, fontWeight: '500' }}>
-                                Photo captured · tap Retake in camera to change
+                                Photo captured · tap back to retake
                             </Text>
                         </View>
                     </View>
                 ) : null}
 
-                {/* Severity */}
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 10 }}>
-                    How severe is it?
-                </Text>
-                <SeveritySelector selected={severity} onSelect={setSeverity} />
-                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 8, marginBottom: 20 }}>
-                    {SEVERITY_DESCRIPTIONS[severity]}
-                </Text>
+                {/* Severity note — server decides, not the user */}
+                <View style={{
+                    backgroundColor: '#f1f5f9',
+                    borderRadius: 12,
+                    padding: 14,
+                    flexDirection: 'row',
+                    gap: 10,
+                    marginBottom: 20,
+                }}>
+                    <Ionicons name="sparkles-outline" size={18} color="#475569" style={{ marginTop: 1 }} />
+                    <Text style={{ flex: 1, fontSize: 13, color: '#334155', lineHeight: 18 }}>
+                        Our AI classifies severity from your photo — no need to pick a level.
+                    </Text>
+                </View>
 
                 {/* Description */}
                 <Text style={{ fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 }}>

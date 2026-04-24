@@ -212,6 +212,14 @@ ML_CONFIDENCE_THRESHOLD_AUTO_VERIFY = float(
 ML_CONFIDENCE_THRESHOLD_REVIEW = float(os.environ.get('ML_CONFIDENCE_THRESHOLD_REVIEW', '0.50'))
 ML_MODEL_PATH = os.environ.get('ML_MODEL_PATH', '')
 
+# Severity derived from YOLO detection box area as a fraction of the full frame.
+# Highest matching bucket wins; anything smaller than MEDIUM is LOW.
+ML_SEVERITY_BUCKETS = {
+    'CRITICAL': float(os.environ.get('ML_SEVERITY_CRITICAL', '0.25')),
+    'HIGH':     float(os.environ.get('ML_SEVERITY_HIGH', '0.12')),
+    'MEDIUM':   float(os.environ.get('ML_SEVERITY_MEDIUM', '0.05')),
+}
+
 # ---------------------------------------------------------------------------
 # Firebase
 # ---------------------------------------------------------------------------

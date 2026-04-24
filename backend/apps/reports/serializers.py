@@ -53,10 +53,15 @@ class ReportCreateSerializer(serializers.Serializer):
     latitude = serializers.FloatField()
     longitude = serializers.FloatField()
     image_url = serializers.URLField(max_length=500)
-    severity = serializers.ChoiceField(choices=['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])
-    # No max_value — server runs its own ML and overwrites this; client value is just a hint.
-    # Mobile clamps to [0,1] before sending, but we don't hard-reject slightly-out-of-range values.
-    confidence = serializers.FloatField(min_value=0.0)
+    # Severity and confidence are both placeholders on the way in. The server-side
+    # YOLOv8 task overwrites confidence with its own score and derives severity from
+    # the detection box area, so the client's values are never trusted for routing.
+    severity = serializers.ChoiceField(
+        choices=['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
+        required=False,
+        default='LOW',
+    )
+    confidence = serializers.FloatField(min_value=0.0, required=False, default=0.0)
     description = serializers.CharField(max_length=1000, required=False, default='')
 
     def validate(self, data):
